@@ -1,0 +1,517 @@
+#!/usr/bin/env node
+var argv = process.argv.slice( 2 )
+var os = require( 'os' )
+var path = require( 'path' )
+var fs = require( 'fs' )
+
+var NODE_MIRROR = 'https://nodejs.org/dist/'
+
+var N_PREFIX = process.env.N_PREFIX || '/usr/local'
+var BASE_VERSIONS_DIR = path.join( N_PREFIX, 'n', 'versions' )
+
+var USAGE = `
+  Usage: n [options/env] [COMMAND] [args]
+
+  Environments:
+    n [COMMAND] [args]            Uses default env (node)
+    n project [COMMAND]           Uses custom env-variables to use non-official sources
+
+  Commands:
+
+    n                              Output versions installed
+    n latest                       Install or activate the latest node release
+    n -a x86 latest                As above but force 32 bit architecture
+    n stable                       Install or activate the latest stable node release
+    n lts                          Install or activate the latest LTS node release
+    n <version>                    Install node <version>
+    n bin <version>                Output bin path for <version>
+    n rm <version ...>             Remove the given version(s)
+    n prune                        Remove all versions except the current version
+    n --latest                     Output the latest node version available
+    n --stable                     Output the latest stable node version available
+    n --lts                        Output the latest LTS node version available
+    n ls                           Output the versions of node available
+
+  Options:
+
+    -V, --version   Output current version of n
+    -h, --help      Display help information
+    -q, --quiet     Disable curl output (if available)
+    -d, --download  Download only
+    -a, --arch      Override system architecture
+
+  Aliases:
+
+    which   bin
+    use     as
+    list    ls
+    -       rm
+
+`
+
+if( argv.includes( '--help' ) || argv.includes( '-h' ) ) {
+  process.stdout.write( USAGE )
+  process.exit( 0 )
+}
+
+if( argv.includes( '--version' ) || argv.includes( '-v' ) ) {
+  process.stdout.write( require( '../package.json' ).version )
+  process.stdout.write( os.EOL )
+  process.exit( 0 )
+}
+
+function hideCursor() {
+  if( !process.stdout.isTTY ) return;
+  process.stdout.write( '\u001b[?25l' )
+}
+
+function showCursor() {
+  if( !process.stdout.isTTY ) return;
+  process.stdout.write( '\u001b[?25h' )
+}
+
+function eraseLine() {
+  if( !process.stdout.isTTY ) return;
+  process.stdout.write( '\u001b[1A\u001b[2K' )
+}
+
+function fullscreen() {
+  if( !process.stdout.isTTY ) return;
+  process.stdout.write( '\u001b[?1049h' )
+}
+
+function leaveFullscreen() {
+  if( !process.stdout.isTTY ) return;
+  process.stdout.write( '\u001b[?1049l' )
+}
+
+function pad( value, length ) {
+  while( value.length < length ) {
+    value = ' ' + value
+  }
+  return value
+}
+
+function log( label, value ) {
+  process.stdout.write( `  \u001b[36m${ pad( label, 10 ) }\u001b[0m : \u001b[2m${ value }\u001b[22m\u001b[0m${os.EOL}` )
+}
+
+function logError( error ) {
+  process.stdout.write( `${os.EOL}  \u001b[31m${ pad( 'error', 10 ) }\u001b[0m : \u001b[2m${ error.message || error }\u001b[22m\u001b[0m${os.EOL}` )
+}
+
+function onError( error ) {
+  logError( error )
+  process.exit( 1 )
+}
+
+function onExit() {
+  // leaveFullscreen()
+  showCursor()
+}
+
+process.on( 'uncaughtException', onError )
+process.on( 'exit', onExit )
+
+// fullscreen()
+// hideCursor()
+
+function tarballUrl( version, platform, arch, format ) {
+
+  platform = platform || ( platform === 'win32' ? 'win' : platform )
+  format = format || ( platform === 'win' ? '.zip' : '.tar.gz' )
+  arch = arch || process.arch
+
+  return `${NODE_MIRROR}v${version}/node-v${version}-${platform}-${arch}${format}`
+
+}
+
+function checksumUrl( version ) {
+  return `${NODE_MIRROR}v${version}/SHASUMS256.txt`
+}
+
+function getCurrentVersion() {
+  var childProcess = require( 'child_process' )
+  var cmd = 'node -e "console.log(JSON.stringify({ version: process.versions.node, arch: process.arch }))"'
+  var info = null
+  try {
+    info = JSON.parse( childProcess.execSync( cmd ).toString() )
+  } catch( error ) {
+    logError( error )
+  }
+  return info
+}
+
+function getRemoteVersions( callback ) {
+
+  var url = require( 'url' )
+  var https = require( 'https' )
+  var zlib = require( 'zlib' )
+
+  var options = Object.assign({
+    headers: { 'Accept-Encoding': 'gzip' },
+  }, url.parse( 'https://nodejs.org/dist/index.json' ) )
+
+  var req = https.get( options, ( res ) => {
+
+    var data = ''
+
+    res = res.pipe( zlib.createGunzip() )
+
+    res.setEncoding( 'utf8' )
+
+    res.on( 'readable', function() {
+      var chunk = ''
+      while( chunk = this.read() ) {
+        data += chunk
+      }
+    })
+
+    res.once( 'end', () => {
+      callback( null, JSON.parse( data ) )
+    })
+
+  })
+
+  req.on( 'error', callback )
+
+}
+
+function getPlatform() {
+  switch( process.platform ) {
+    case 'darwin': return 'osx'
+    case 'win32': return 'win'
+    default: return process.platform
+  }
+}
+
+function getReleaseAssetTuple( platform ) {
+  platform = platform || process.platform
+  switch( platform ) {
+    case 'darwin': return `${getPlatform()}-${process.arch}-tar`
+    case 'win32': return `${getPlatform()}-${process.arch}-zip`
+    default: return `${getPlatform()}-${process.arch}`
+  }
+}
+
+function hasAsset( tuple, release ) {
+  return release.files.some(( asset ) => {
+    return asset === tuple
+  })
+}
+
+function listRemoteVersions() {
+
+  getRemoteVersions(( error, releases ) => {
+
+    if( error ) throw error
+
+    var tuple = getReleaseAssetTuple()
+    var applicable = releases.filter(( release ) => {
+      return hasAsset( tuple, release )
+    })
+
+    var current = getCurrentVersion()
+
+    process.stdout.write( os.EOL )
+    applicable.forEach(( release ) => {
+      var version = release.version.replace( 'v', '' )
+      version === current.version ?
+        process.stdout.write( `  \u001b[36mo\u001b[0m ${version}\u001b[0m${os.EOL}` ) :
+        process.stdout.write( `    \u001b[2m${version}\u001b[22m${os.EOL}` )
+    })
+
+  })
+
+}
+
+function getLocalVersions() {
+
+  var semver = require( 'semver' )
+  var dirname = path.join( BASE_VERSIONS_DIR, 'node' )
+
+  return fs.readdirSync( dirname )
+    .filter(( version ) => {
+      return /^\d+\.\d+\.\d+$/.test( version )
+    })
+    .sort( semver.rcompare )
+
+}
+
+function listLocalVersions() {
+  process.stdout.write( os.EOL )
+  var current = getCurrentVersion()
+  getLocalVersions().forEach(( version ) => {
+    version === current.version ?
+      process.stdout.write( `  \u001b[36mo\u001b[0m ${version}\u001b[0m${os.EOL}` ) :
+      process.stdout.write( `    \u001b[2m${version}\u001b[22m${os.EOL}` )
+  })
+}
+
+function getChecksums( version, callback ) {
+
+  var https = require( 'https' )
+  var url = checksumUrl( version )
+
+  var req = https.get( url, ( res ) => {
+
+    if( res.statusCode !== 200 ) {
+      res.destroy()
+      // process.stdout.write( `  error : ${res.statusMessage}${os.EOL}` )
+      logError( res.statusMessage )
+      return callback( new Error( `HTTP ${res.statusCode}: ${res.statusMessage}` ) )
+    }
+
+    var data = ''
+
+    res.setEncoding( 'utf8' )
+
+    res.on( 'readable', function() {
+      var chunk = ''
+      while( chunk = this.read() ) data += chunk
+    })
+
+    res.once( 'end', () => {
+      var checksums = {}
+      data.trim().split( /\r?\n/g ).forEach(( line ) => {
+        var parts = line.split( /\s+/ )
+        if( parts.length === 2 ) {
+          checksums[ parts[1] ] = parts[0]
+        }
+      })
+      callback( null, checksums )
+    })
+
+  })
+
+}
+
+function install( version, platform, arch, callback ) {
+
+  version = version.replace( 'v', '' )
+
+  var https = require( 'https' )
+  var zlib = require( 'zlib' )
+  var crypto = require( 'crypto' )
+  var stream = require( 'stream' )
+  var tar = require( 'tar-stream' )
+  var tarball = tarballUrl( version, platform, arch )
+
+  process.stdout.write( os.EOL )
+
+  log( 'install', `node-v${version}` )
+  log( 'fetch', tarball )
+
+  var checksum = new stream.Transform({
+    transform( chunk, _, next ) {
+      this.hash.write( chunk )
+      next( null, chunk )
+    },
+    flush( done ) {
+      this.hash.on( 'readable', () => {
+        var hash = this.hash.read()
+        if( hash ) this.emit( 'hash', hash )
+      })
+      // this.hash.end()
+    }
+  })
+
+  checksum.hash = crypto.createHash( 'sha256' )
+
+  checksum.on( 'hash', ( hash ) => {
+    var checksum = hash.toString( 'hex' )
+    var filename = path.basename( tarball )
+    log( 'fetch', 'SHASUMS256' )
+    getChecksums( version, ( error, checksums ) => {
+      if( checksum === checksums[ filename ] ) {
+        log( 'checksum', hash.toString( 'hex' ) )
+      } else {
+        logError( 'Checksum mismatch' )
+      }
+    })
+  })
+
+  var req = https.get( tarball, ( res ) => {
+
+    if( res.statusCode !== 200 ) {
+      res.destroy()
+      logError( res.statusMessage )
+      return callback( new Error( `HTTP ${res.statusCode}: ${res.statusMessage}` ) )
+    }
+
+    var target = path.join( BASE_VERSIONS_DIR, 'node', version )
+    var extract = tar.extract()
+    var tarballRoot = null
+
+    log( 'extract', '' )
+
+    extract.on( 'entry', ( stats, stream, next ) => {
+
+      tarballRoot = tarballRoot || stats.name.split( '/' ).shift()
+
+      var relative = path.relative( tarballRoot, stats.name )
+      var filename = path.join( target, relative )
+
+      if( stats.type === 'directory' ) {
+        eraseLine()
+        log( 'mkdir', path.basename( relative ) )
+        try {
+          fs.mkdirSync( filename, stats.mode )
+        } catch( error ) {
+          if( error.code !== 'EEXIST' )
+            return callback( error )
+        }
+        stream.on( 'end', next )
+        stream.resume()
+      } else if( stats.type === 'file' || stats.type === 'contiguous-file' ) {
+        eraseLine()
+        log( 'extract', path.basename( relative ) )
+        var writeStream = fs.createWriteStream( filename, {
+          mode: stats.mode,
+        })
+        stream.pipe( writeStream )
+          .on( 'finish', next )
+      } else if( stats.type === 'symlink' ) {
+        eraseLine()
+        log( 'symlink', path.basename( relative ) )
+        try {
+          fs.symlinkSync( path.join( path.dirname( filename ), stats.linkname ), filename )
+        } catch( error ) {
+          if( error.code !== 'EEXIST' )
+            return callback( error )
+        }
+        stream.on( 'end', next )
+        stream.resume()
+      } else if( stats.type === 'link' ) {
+        eraseLine()
+        log( 'link', path.basename( relative ) )
+        try {
+          fs.linkSync( path.join( path.dirname( filename ), stats.linkname ), filename )
+        } catch( error ) {
+          if( error.code !== 'EEXIST' )
+            return callback( error )
+        }
+        stream.on( 'end', next )
+        stream.resume()
+      } else {
+        // log( 'type', stats.type )
+        stream.on( 'end', next )
+        stream.resume()
+      }
+
+    })
+
+    extract.on( 'error', callback )
+    extract.on( 'finish', callback )
+
+    res.pipe( checksum )
+      .pipe( zlib.createGunzip() )
+      .pipe( extract )
+
+  })
+
+  req.on( 'error', callback )
+
+}
+
+function activate( version, platform, arch ) {
+
+  var current = getCurrentVersion()
+  var currentBins = fs.readdirSync( path.join( BASE_VERSIONS_DIR, 'node', current.version, 'bin' ) )
+
+  // process.stdout.write( os.EOL )
+  // log( 'unlink', '' )
+
+  currentBins.forEach(( bin ) => {
+    var filename = path.join( N_PREFIX, 'bin', bin )
+    // eraseLine()
+    // log( 'unlink', filename )
+    fs.unlinkSync( filename )
+  })
+
+  process.stdout.write( os.EOL )
+  log( 'activate', `node-v${version}` )
+  process.stdout.write( os.EOL )
+
+  var newBins = fs.readdirSync( path.join( BASE_VERSIONS_DIR, 'node', version, 'bin' ) )
+
+  newBins.forEach(( bin ) => {
+    var target = path.join( N_PREFIX, 'bin', bin )
+    var filename = path.join( BASE_VERSIONS_DIR, 'node', version, 'bin', bin )
+    // eraseLine()
+    log( 'link', `${target} -> ${filename}` )
+    fs.symlinkSync( filename, target )
+  })
+
+}
+
+function parseArgv( args ) {
+
+  args = args.slice()
+
+  var semver = require( 'semver' )
+  var argv = { _: [] }
+  var value = null
+
+  if( semver.coerce( args[0] ) ) {
+    argv.version = new semver.Range( args.shift() )
+  } else {
+    argv.command = args[0] && args[0][0] !== '-' && args.shift()
+  }
+
+  while( value = args.shift() ) {
+    switch( value ) {
+      case '-a': case '--arch': argv.arch = args.shift(); break
+      case '--quiet': argv.quiet = true; break
+      case '--download': argv.download = true; break
+      case '--lts': argv.lts = true; break
+      case '--latest': argv.latest = true; break
+      case '--stable': argv.stable = true; break
+      default: argv._.push( value ); break
+    }
+  }
+
+  return argv
+
+}
+
+argv = parseArgv( argv )
+// console.log( argv )
+
+switch( argv.command ) {
+  case 'ls': return listLocalVersions()
+  case 'rm': return remove()
+  case 'prune': return prune()
+  case 'bin': return bin()
+  case 'versions': return listRemoteVersions()
+  case 'latest': return installLatest()
+  case 'stable': return installStable()
+  case 'lts': return installLTS()
+}
+
+// If no command is given, but a version number is,
+// parse it as a range and select the highest matching
+// version from the remote
+if( !argv.command && argv.version ) {
+  var semver = require( 'semver' )
+  getRemoteVersions(( error, data ) => {
+    if( error ) throw error
+    var versions = data.map(( release ) => release.version )
+    var version = semver.maxSatisfying( versions, argv.version )
+    if( version ) {
+      version = version.replace( 'v', '' )
+      var localVersions = getLocalVersions()
+      if( localVersions.indexOf( version ) !== -1 ) {
+        activate( version, process.platform, argv.arch || process.arch, ( error ) => {
+          if( error ) throw error
+        })
+      } else {
+        install( version, process.platform, argv.arch || process.arch, ( error ) => {
+          if( error ) throw error
+        })
+      }
+    } else {
+      logError( `No version for ${argv.version.range}` )
+    }
+  })
+}

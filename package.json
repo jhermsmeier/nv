@@ -1,0 +1,19 @@
+{
+  "name": "n",
+  "version": "1.0.0",
+  "description": "Node version management",
+  "author": "Jonas Hermsmeier <jhermsmeier@gmail.com> (https://jhermsmeier.de)",
+  "keywords": [],
+  "license": "MIT",
+  "main": "",
+  "bin": {
+    "nv": "bin/n"
+  },
+  "dependencies": {
+    "semver": "^5.5.0",
+    "tar-stream": "^1.5.5"
+  },
+  "devDependencies": {
+    "pkg": "^4.3.1"
+  }
+}
