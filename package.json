@@ -9,6 +9,9 @@
   "bin": {
     "nv": "bin/n"
   },
+  "scripts": {
+    "pkg": "node scripts/pkg.js"
+  },
   "dependencies": {
     "semver": "^5.5.0",
     "tar-stream": "^1.5.5"

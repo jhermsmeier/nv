@@ -132,7 +132,9 @@ function checksumUrl( version ) {
 
 function getCurrentVersion() {
   var childProcess = require( 'child_process' )
-  var cmd = 'node -e "console.log(JSON.stringify({ version: process.versions.node, arch: process.arch }))"'
+  // When bundled, `pkg` assumes self as "node", so we need an absolute path
+  var node = childProcess.execSync( 'which node' ).toString().trim()
+  var cmd = node + ' -e "console.log(JSON.stringify({ version: process.versions.node, arch: process.arch }))"'
   var info = null
   try {
     info = JSON.parse( childProcess.execSync( cmd ).toString() )
