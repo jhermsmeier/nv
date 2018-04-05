@@ -212,13 +212,18 @@ function listRemoteVersions() {
     })
 
     var current = getCurrentVersion()
+    var localVersions = getLocalVersions()
 
     process.stdout.write( os.EOL )
     applicable.forEach(( release ) => {
       var version = release.version.replace( 'v', '' )
-      version === current.version ?
-        process.stdout.write( `  \u001b[36mo\u001b[0m ${version}\u001b[0m${os.EOL}` ) :
+      if( version === current.version ) {
+        process.stdout.write( `  \u001b[36mo\u001b[0m ${version}\u001b[0m${os.EOL}` )
+      } else if( localVersions.includes( version ) ) {
+        process.stdout.write( `    ${version}${os.EOL}` )
+      } else {
         process.stdout.write( `    \u001b[2m${version}\u001b[22m${os.EOL}` )
+      }
     })
 
   })
