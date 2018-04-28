@@ -446,8 +446,15 @@ function activate( version, platform, arch ) {
     var target = path.join( N_PREFIX, 'bin', bin )
     var filename = path.join( BASE_VERSIONS_DIR, 'node', version, 'bin', bin )
     // eraseLine()
-    log( 'link', `${target} -> ${filename}` )
-    fs.symlinkSync( filename, target )
+    // NOTE: `node` needs hard linking, as otherwise
+    // npm's global root would point to N_PREFIX
+    if( bin === 'node' ) {
+      log( 'link', `${target} -> ${filename}` )
+      fs.linkSync( filename, target )
+    } else {
+      log( 'symlink', `${target} -> ${filename}` )
+      fs.symlinkSync( filename, target )
+    }
   })
 
 }
