@@ -252,7 +252,7 @@ function getLocalVersions() {
     .filter( function( version ) {
       return /^\d+\.\d+\.\d+$/.test( version )
     })
-    .sort( semver.rcompare )
+    .sort( semver.compare )
 
 }
 
