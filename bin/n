@@ -15,45 +15,45 @@ var N_PREFIX = process.env.N_PREFIX || (
 
 var BASE_VERSIONS_DIR = path.join( N_PREFIX, 'n', 'versions' )
 
-var USAGE = `
-  Usage: n [options/env] [COMMAND] [args]
-
-  Environments:
-    n [COMMAND] [args]            Uses default env (node)
-    n project [COMMAND]           Uses custom env-variables to use non-official sources
-
-  Commands:
-
-    n                              Output versions installed
-    n latest                       Install or activate the latest node release
-    n -a x86 latest                As above but force 32 bit architecture
-    n stable                       Install or activate the latest stable node release
-    n lts                          Install or activate the latest LTS node release
-    n <version>                    Install node <version>
-    n bin <version>                Output bin path for <version>
-    n rm <version ...>             Remove the given version(s)
-    n prune                        Remove all versions except the current version
-    n --latest                     Output the latest node version available
-    n --stable                     Output the latest stable node version available
-    n --lts                        Output the latest LTS node version available
-    n ls                           Output the versions of node available
-
-  Options:
-
-    -V, --version   Output current version of n
-    -h, --help      Display help information
-    -q, --quiet     Disable curl output (if available)
-    -d, --download  Download only
-    -a, --arch      Override system architecture
-
-  Aliases:
-
-    which   bin
-    use     as
-    list    ls
-    -       rm
-
-`
+var USAGE = [
+'  Usage: n [options/env] [COMMAND] [args]',
+'',
+'  Environments:',
+'    n [COMMAND] [args]            Uses default env (node)',
+'    n project [COMMAND]           Uses custom env-variables to use non-official sources',
+'',
+'  Commands:',
+'',
+'    n                              Output versions installed',
+'    n latest                       Install or activate the latest node release',
+'    n -a x86 latest                As above but force 32 bit architecture',
+'    n stable                       Install or activate the latest stable node release',
+'    n lts                          Install or activate the latest LTS node release',
+'    n <version>                    Install node <version>',
+'    n bin <version>                Output bin path for <version>',
+'    n rm <version ...>             Remove the given version(s)',
+'    n prune                        Remove all versions except the current version',
+'    n --latest                     Output the latest node version available',
+'    n --stable                     Output the latest stable node version available',
+'    n --lts                        Output the latest LTS node version available',
+'    n ls                           Output the versions of node available',
+'',
+'  Options:',
+'',
+'    -V, --version   Output current version of n',
+'    -h, --help      Display help information',
+'    -q, --quiet     Disable curl output (if available)',
+'    -d, --download  Download only',
+'    -a, --arch      Override system architecture',
+'    ',
+'  Aliases:',
+'',
+'    which   bin',
+'    use     as',
+'    list    ls',
+'    -       rm',
+'',
+].join( os.EOL )
 
 function includes( array, value ) {
   return !!~array.indexOf( value )
@@ -103,11 +103,19 @@ function pad( value, length ) {
 }
 
 function log( label, value ) {
-  process.stdout.write( `  \u001b[36m${ pad( label, 10 ) }\u001b[0m : \u001b[2m${ value }\u001b[22m\u001b[0m${os.EOL}` )
+  process.stdout.write(
+    '  \u001b[36m' + pad( label, 10 ) +
+    '\u001b[0m : \u001b[2m' + value +
+    '\u001b[22m\u001b[0m' + os.EOL
+  )
 }
 
 function logError( error ) {
-  process.stdout.write( `${os.EOL}  \u001b[31m${ pad( 'error', 10 ) }\u001b[0m : \u001b[2m${ error.message || error }\u001b[22m\u001b[0m${os.EOL}` )
+  process.stdout.write(
+    os.EOL + '  \u001b[31m' + pad( 'error', 10 ) +
+    '\u001b[0m : \u001b[2m' + ( process.env['DEBUG'] ? error.stack : error ) +
+    '\u001b[22m\u001b[0m' + os.EOL
+  )
 }
 
 function onError( error ) {
@@ -132,12 +140,12 @@ function archiveUrl( version, platform, arch, format ) {
   format = format || ( platform === 'win' ? '.zip' : '.tar.gz' )
   arch = arch || process.arch
 
-  return `${NODE_MIRROR}v${version}/node-v${version}-${platform}-${arch}${format}`
+  return NODE_MIRROR + 'v' + version + '/node-v' + version + '-' + platform + '-' + arch + format
 
 }
 
 function checksumUrl( version ) {
-  return `${NODE_MIRROR}v${version}/SHASUMS256.txt`
+  return NODE_MIRROR + 'v' + version + '/SHASUMS256.txt'
 }
 
 function getCurrentVersion() {
@@ -161,9 +169,9 @@ function getRemoteVersions( callback ) {
   var https = require( 'https' )
   var zlib = require( 'zlib' )
 
-  var options = Object.assign({
-    headers: { 'Accept-Encoding': 'gzip' },
-  }, url.parse( 'https://nodejs.org/dist/index.json' ) )
+  var options = url.parse( 'https://nodejs.org/dist/index.json' )
+
+  options.headers = { 'Accept-Encoding': 'gzip' }
 
   var req = https.get( options, function( res ) {
 
@@ -201,9 +209,9 @@ function getPlatform() {
 function getReleaseAssetTuple( platform ) {
   platform = platform || process.platform
   switch( platform ) {
-    case 'darwin': return `${getPlatform()}-${process.arch}-tar`
-    case 'win32': return `${getPlatform()}-${process.arch}-zip`
-    default: return `${getPlatform()}-${process.arch}`
+    case 'darwin': return getPlatform() + '-' + process.arch + '-' + tar
+    case 'win32': return getPlatform() + '-' + process.arch + '-' + zip
+    default: return getPlatform() + '-' + process.arch
   }
 }
 
@@ -231,11 +239,11 @@ function listRemoteVersions() {
     applicable.forEach( function( release ) {
       var version = release.version.replace( /^v/, '' )
       if( version === current.version ) {
-        process.stdout.write( `  \u001b[36mo\u001b[0m ${version}\u001b[0m${os.EOL}` )
+        process.stdout.write( '  \u001b[36mo\u001b[0m ' + version + '\u001b[0m' + os.EOL )
       } else if( includes( localVersions, version ) ) {
-        process.stdout.write( `    ${version}${os.EOL}` )
+        process.stdout.write( '    ' + version + os.EOL )
       } else {
-        process.stdout.write( `    \u001b[2m${version}\u001b[22m${os.EOL}` )
+        process.stdout.write( '    \u001b[2m' + version + '\u001b[22m' + os.EOL )
       }
     })
 
@@ -261,8 +269,8 @@ function listLocalVersions() {
   var current = getCurrentVersion()
   getLocalVersions().forEach(function( version ) {
     version === current.version ?
-      process.stdout.write( `  \u001b[36mo\u001b[0m ${version}\u001b[0m${os.EOL}` ) :
-      process.stdout.write( `    \u001b[2m${version}\u001b[22m${os.EOL}` )
+      process.stdout.write( '  \u001b[36mo\u001b[0m ' + version + '\u001b[0m' + os.EOL ) :
+      process.stdout.write( '    \u001b[2m' + version + '\u001b[22m' + os.EOL )
   })
 }
 
@@ -277,7 +285,7 @@ function getChecksums( version, callback ) {
       res.destroy()
       // process.stdout.write( `  error : ${res.statusMessage}${os.EOL}` )
       logError( res.statusMessage )
-      return callback( new Error( `HTTP ${res.statusCode}: ${res.statusMessage}` ) )
+      return callback( new Error( 'HTTP ' + res.statusCode + ': ' + res.statusMessage ) )
     }
 
     var data = ''
@@ -317,15 +325,15 @@ function install( version, platform, arch, callback ) {
 
   process.stdout.write( os.EOL )
 
-  log( 'install', `node-v${version}` )
+  log( 'install', 'node-v' + version )
   log( 'fetch', archive )
 
   var checksum = new stream.Transform({
-    transform( chunk, _, next ) {
+    transform: function( chunk, _, next ) {
       this.hash.write( chunk )
       next( null, chunk )
     },
-    flush( done ) {
+    flush: function( done ) {
       var self = this
       this.hash.on( 'readable', function() {
         var hash = self.hash.read()
@@ -355,7 +363,7 @@ function install( version, platform, arch, callback ) {
     if( res.statusCode !== 200 ) {
       res.destroy()
       logError( res.statusMessage )
-      return callback( new Error( `HTTP ${res.statusCode}: ${res.statusMessage}` ) )
+      return callback( new Error( 'HTTP ' + res.statusCode + ': ' + res.statusMessage ) )
     }
 
     var target = path.join( BASE_VERSIONS_DIR, 'node', version )
@@ -449,7 +457,7 @@ function activate( version, platform, arch ) {
   })
 
   process.stdout.write( os.EOL )
-  log( 'activate', `node-v${version}` )
+  log( 'activate', 'node-v' + version )
   process.stdout.write( os.EOL )
 
   var newBins = fs.readdirSync( path.join( BASE_VERSIONS_DIR, 'node', version, 'bin' ) )
@@ -463,11 +471,11 @@ function activate( version, platform, arch ) {
     // This also avoids having to allow Node
     // through the firewall repeatedly.
     if( bin === 'node' ) {
-      log( 'link', `${target} -> ${filename}` )
+      log( 'link', target + ' -> ' + filename )
       fs.linkSync( filename, target )
     } else {
       // NOTE: This probably won't work on Windows (?)
-      log( 'symlink', `${target} -> ${filename}` )
+      log( 'symlink', target + ' -> ' + filename )
       fs.symlinkSync( filename, target )
     }
   })
@@ -540,7 +548,7 @@ if( !argv.command && argv.version ) {
         })
       }
     } else {
-      logError( `No version for ${argv.version.range}` )
+      logError( 'No version for ' + argv.version.range )
     }
   })
 }
