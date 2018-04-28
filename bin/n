@@ -15,53 +15,42 @@ var N_PREFIX = process.env.N_PREFIX || (
 
 var BASE_VERSIONS_DIR = path.join( N_PREFIX, 'n', 'versions' )
 
-var USAGE = [
-  '',
-  '  Usage: n [options/env] [COMMAND] [args]',
-  '',
-  '  Environments:',
-  '    n [COMMAND] [args]            Uses default env (node)',
-  '    n project [COMMAND]           Uses custom env-variables to use non-official sources',
-  '',
-  '  Commands:',
-  '',
-  '    n                              Output versions installed',
-  '    n latest                       Install or activate the latest node release',
-  '    n -a x86 latest                As above but force 32 bit architecture',
-  '    n stable                       Install or activate the latest stable node release',
-  '    n lts                          Install or activate the latest LTS node release',
-  '    n <version>                    Install node <version>',
-  '    n bin <version>                Output bin path for <version>',
-  '    n rm <version ...>             Remove the given version(s)',
-  '    n prune                        Remove all versions except the current version',
-  '    n --latest                     Output the latest node version available',
-  '    n --stable                     Output the latest stable node version available',
-  '    n --lts                        Output the latest LTS node version available',
-  '    n ls                           Output the versions of node available',
-  '',
-  '  Options:',
-  '',
-  '    -V, --version   Output current version of n',
-  '    -h, --help      Display help information',
-  '    -q, --quiet     Disable curl output (if available)',
-  '    -d, --download  Download only',
-  '    -a, --arch      Override system architecture',
-  '    ',
-  '  Aliases:',
-  '',
-  '    which   bin',
-  '    use     as',
-  '    list    ls',
-  '    -       rm',
-  '',
-].join( os.EOL )
+function usage() {
+  var extname = process.platform === 'win32' ? '.exe' : undefined
+  var bin = path.basename( process.argv[1], extname )
+  var USAGE = [
+    '',
+    '  Usage: $0 [options] [command] [args]',
+    '',
+    '  Commands:',
+    '',
+    '    $0 <version>               Install node <version>',
+    '    $0 latest                  Install or activate the latest node release',
+    '    $0 -a x86 latest           As above but force 32 bit architecture',
+    '    $0 stable                  Install or activate the latest stable node release',
+    '    $0 lts                     Install or activate the latest LTS node release',
+    '    $0 ls                      Output versions installed',
+    '    $0 versions                Output the versions of node available',
+    '    $0 bin <version>           Output bin path for <version>',
+    '    $0 rm <version ...>        Remove the given version(s)',
+    '    $0 prune                   Remove all versions except the current version',
+    '',
+    '  Options:',
+    '',
+    '    -v, --version     Output current version of $0',
+    '    -h, --help        Display help information',
+    '    -a, --arch        Override system architecture',
+    '',
+  ]
+  return USAGE.join( os.EOL ).replace( /\$0/g, bin )
+}
 
 function includes( array, value ) {
   return !!~array.indexOf( value )
 }
 
 if( includes( argv, '--help' ) || includes( argv, '-h' ) ) {
-  process.stdout.write( USAGE )
+  process.stdout.write( usage() )
   process.exit( 0 )
 }
 
@@ -271,7 +260,7 @@ function getLocalVersions() {
 function listLocalVersions() {
   process.stdout.write( os.EOL )
   var current = getCurrentVersion()
-  getLocalVersions().forEach(function( version ) {
+  getLocalVersions().forEach( function( version ) {
     version === current.version ?
       process.stdout.write( '  \u001b[36mo\u001b[0m ' + version + '\u001b[0m' + os.EOL ) :
       process.stdout.write( '    \u001b[2m' + version + '\u001b[22m' + os.EOL )
