@@ -199,8 +199,8 @@ function getPlatform() {
 function getReleaseAssetTuple( platform ) {
   platform = platform || process.platform
   switch( platform ) {
-    case 'darwin': return getPlatform() + '-' + process.arch + '-' + tar
-    case 'win32': return getPlatform() + '-' + process.arch + '-' + zip
+    case 'darwin': return getPlatform() + '-' + process.arch + '-tar'
+    case 'win32': return getPlatform() + '-' + process.arch + '-zip'
     default: return getPlatform() + '-' + process.arch
   }
 }
@@ -212,6 +212,8 @@ function hasAsset( tuple, release ) {
 }
 
 function listRemoteVersions() {
+
+  var semver = require( 'semver' )
 
   getRemoteVersions( function( error, releases ) {
 
@@ -229,7 +231,9 @@ function listRemoteVersions() {
     var localVersions = getLocalVersions()
 
     process.stdout.write( os.EOL )
-    applicable.forEach( function( release ) {
+    applicable.sort( function( a, b ) {
+      return semver.compare( a.version, b.version )
+    }).forEach( function( release ) {
       var version = release.version.replace( /^v/, '' )
       if( version === current.version ) {
         process.stdout.write( '  \u001b[36mo\u001b[0m ' + version + '\u001b[0m' + os.EOL )
