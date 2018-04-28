@@ -4,9 +4,15 @@ var os = require( 'os' )
 var path = require( 'path' )
 var fs = require( 'fs' )
 
-var NODE_MIRROR = 'https://nodejs.org/dist/'
+var NODE_MIRROR = process.env['NODE_MIRROR'] ||
+  'https://nodejs.org/dist/'
 
-var N_PREFIX = process.env.N_PREFIX || '/usr/local'
+var N_PREFIX = process.env.N_PREFIX || (
+  process.platform === 'win32' ?
+    process.env['APPDATA_LOCAL'] :
+    '/usr/local'
+)
+
 var BASE_VERSIONS_DIR = path.join( N_PREFIX, 'n', 'versions' )
 
 var USAGE = `
@@ -116,7 +122,7 @@ process.on( 'exit', onExit )
 // fullscreen()
 // hideCursor()
 
-function tarballUrl( version, platform, arch, format ) {
+function archiveUrl( version, platform, arch, format ) {
 
   platform = platform || ( platform === 'win32' ? 'win' : platform )
   format = format || ( platform === 'win' ? '.zip' : '.tar.gz' )
@@ -133,7 +139,8 @@ function checksumUrl( version ) {
 function getCurrentVersion() {
   var childProcess = require( 'child_process' )
   // When bundled, `pkg` assumes self as "node", so we need an absolute path
-  var node = childProcess.execSync( 'which node' ).toString().trim()
+  var which = process.platform === 'win32' ? 'where node' : 'which node'
+  var node = childProcess.execSync( which ).toString().trim()
   var cmd = node + ' -e "console.log(JSON.stringify({ version: process.versions.node, arch: process.arch }))"'
   var info = null
   try {
@@ -217,8 +224,8 @@ function listRemoteVersions() {
     var localVersions = getLocalVersions()
 
     process.stdout.write( os.EOL )
-    applicable.forEach(( release ) => {
-      var version = release.version.replace( 'v', '' )
+    applicable.forEach( function( release ) {
+      var version = release.version.replace( /^v/, '' )
       if( version === current.version ) {
         process.stdout.write( `  \u001b[36mo\u001b[0m ${version}\u001b[0m${os.EOL}` )
       } else if( localVersions.includes( version ) ) {
@@ -295,19 +302,19 @@ function getChecksums( version, callback ) {
 
 function install( version, platform, arch, callback ) {
 
-  version = version.replace( 'v', '' )
+  version = version.replace( /^v/, '' )
 
   var https = require( 'https' )
   var zlib = require( 'zlib' )
   var crypto = require( 'crypto' )
   var stream = require( 'stream' )
   var tar = require( 'tar-stream' )
-  var tarball = tarballUrl( version, platform, arch )
+  var archive = archiveUrl( version, platform, arch )
 
   process.stdout.write( os.EOL )
 
   log( 'install', `node-v${version}` )
-  log( 'fetch', tarball )
+  log( 'fetch', archive )
 
   var checksum = new stream.Transform({
     transform( chunk, _, next ) {
@@ -327,7 +334,7 @@ function install( version, platform, arch, callback ) {
 
   checksum.on( 'hash', ( hash ) => {
     var checksum = hash.toString( 'hex' )
-    var filename = path.basename( tarball )
+    var filename = path.basename( archive )
     log( 'fetch', 'SHASUMS256' )
     getChecksums( version, ( error, checksums ) => {
       if( checksum === checksums[ filename ] ) {
@@ -338,7 +345,7 @@ function install( version, platform, arch, callback ) {
     })
   })
 
-  var req = https.get( tarball, ( res ) => {
+  var req = https.get( archive, function( res ) {
 
     if( res.statusCode !== 200 ) {
       res.destroy()
@@ -348,15 +355,15 @@ function install( version, platform, arch, callback ) {
 
     var target = path.join( BASE_VERSIONS_DIR, 'node', version )
     var extract = tar.extract()
-    var tarballRoot = null
+    var archiveRoot = null
 
     log( 'extract', '' )
 
     extract.on( 'entry', ( stats, stream, next ) => {
 
-      tarballRoot = tarballRoot || stats.name.split( '/' ).shift()
+      archiveRoot = archiveRoot || stats.name.split( '/' ).shift()
 
-      var relative = path.relative( tarballRoot, stats.name )
+      var relative = path.relative( archiveRoot, stats.name )
       var filename = path.join( target, relative )
 
       if( stats.type === 'directory' ) {
@@ -442,16 +449,19 @@ function activate( version, platform, arch ) {
 
   var newBins = fs.readdirSync( path.join( BASE_VERSIONS_DIR, 'node', version, 'bin' ) )
 
-  newBins.forEach(( bin ) => {
+  newBins.forEach( function( bin ) {
     var target = path.join( N_PREFIX, 'bin', bin )
     var filename = path.join( BASE_VERSIONS_DIR, 'node', version, 'bin', bin )
     // eraseLine()
     // NOTE: `node` needs hard linking, as otherwise
-    // npm's global root would point to N_PREFIX
+    // npm's global root would point to N_PREFIX.
+    // This also avoids having to allow Node
+    // through the firewall repeatedly.
     if( bin === 'node' ) {
       log( 'link', `${target} -> ${filename}` )
       fs.linkSync( filename, target )
     } else {
+      // NOTE: This probably won't work on Windows (?)
       log( 'symlink', `${target} -> ${filename}` )
       fs.symlinkSync( filename, target )
     }
@@ -513,7 +523,7 @@ if( !argv.command && argv.version ) {
     var versions = data.map(( release ) => release.version )
     var version = semver.maxSatisfying( versions, argv.version )
     if( version ) {
-      version = version.replace( 'v', '' )
+      version = version.replace( /^v/, '' )
       var localVersions = getLocalVersions()
       if( localVersions.indexOf( version ) !== -1 ) {
         activate( version, process.platform, argv.arch || process.arch, ( error ) => {
