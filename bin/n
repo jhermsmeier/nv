@@ -225,7 +225,10 @@ function listRemoteVersions() {
 
   getRemoteVersions( function( error, releases ) {
 
-    if( error ) throw error
+    if( error ) {
+      process.exitCode = 1
+      return logError( error )
+    }
 
     var tuple = getReleaseAssetTuple()
     var applicable = releases.filter( function( release ) {
@@ -319,7 +322,7 @@ function install( version, platform, arch, callback ) {
   var https = require( 'https' )
   var zlib = require( 'zlib' )
   var crypto = require( 'crypto' )
-  var stream = require( 'stream' )
+  var stream = require( 'readable-stream' )
   var tar = require( 'tar-stream' )
   var archive = archiveUrl( version, platform, arch )
 
@@ -428,12 +431,26 @@ function install( version, platform, arch, callback ) {
 
     })
 
-    extract.on( 'error', callback )
-    extract.on( 'finish', callback )
+    function destroy( error ) {
+      req.abort()
+      res.destroy( error )
+    }
 
-    res.pipe( checksum )
+    // FIXME: Never fires (?!?!)
+    // extract.on( 'finish', callback )
+
+    // FIXME: Workaround for the above
+    res.on( 'end', function() {
+      setTimeout( callback, 500 )
+    })
+
+    res.on( 'error', callback )
+      .pipe( checksum )
+      .on( 'error', destroy )
       .pipe( zlib.createGunzip() )
+      .on( 'error', destroy )
       .pipe( extract )
+      .on( 'error', destroy )
 
   })
 
@@ -532,19 +549,24 @@ switch( argv.command ) {
 if( !argv.command && argv.version ) {
   var semver = require( 'semver' )
   getRemoteVersions( function( error, data ) {
-    if( error ) throw error
+    if( error ) {
+      process.exitCode = 1
+      return logError( error )
+    }
     var versions = data.map( function( release ) { return release.version })
     var version = semver.maxSatisfying( versions, argv.version )
     if( version ) {
       version = version.replace( /^v/, '' )
       var localVersions = getLocalVersions()
       if( localVersions.indexOf( version ) !== -1 ) {
-        activate( version, process.platform, argv.arch || process.arch, function( error ) {
-          if( error ) throw error
-        })
+        activate( version, process.platform, argv.arch || process.arch )
       } else {
         install( version, process.platform, argv.arch || process.arch, function( error ) {
-          if( error ) throw error
+          if( error ) {
+            process.exitCode = 1
+            return logError( error )
+          }
+          activate( version, process.platform, argv.arch || process.arch )
         })
       }
     } else {
