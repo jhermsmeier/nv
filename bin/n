@@ -55,12 +55,16 @@ var USAGE = `
 
 `
 
-if( argv.includes( '--help' ) || argv.includes( '-h' ) ) {
+function includes( array, value ) {
+  return !!~array.indexOf( value )
+}
+
+if( includes( argv, '--help' ) || includes( argv, '-h' ) ) {
   process.stdout.write( USAGE )
   process.exit( 0 )
 }
 
-if( argv.includes( '--version' ) || argv.includes( '-v' ) ) {
+if( includes( argv, '--version' ) || includes( argv, '-v' ) ) {
   process.stdout.write( require( '../package.json' ).version )
   process.stdout.write( os.EOL )
   process.exit( 0 )
@@ -161,7 +165,7 @@ function getRemoteVersions( callback ) {
     headers: { 'Accept-Encoding': 'gzip' },
   }, url.parse( 'https://nodejs.org/dist/index.json' ) )
 
-  var req = https.get( options, ( res ) => {
+  var req = https.get( options, function( res ) {
 
     var data = ''
 
@@ -176,7 +180,7 @@ function getRemoteVersions( callback ) {
       }
     })
 
-    res.once( 'end', () => {
+    res.once( 'end', function() {
       callback( null, JSON.parse( data ) )
     })
 
@@ -204,19 +208,19 @@ function getReleaseAssetTuple( platform ) {
 }
 
 function hasAsset( tuple, release ) {
-  return release.files.some(( asset ) => {
+  return release.files.some( function( asset ) {
     return asset === tuple
   })
 }
 
 function listRemoteVersions() {
 
-  getRemoteVersions(( error, releases ) => {
+  getRemoteVersions( function( error, releases ) {
 
     if( error ) throw error
 
     var tuple = getReleaseAssetTuple()
-    var applicable = releases.filter(( release ) => {
+    var applicable = releases.filter( function( release ) {
       return hasAsset( tuple, release )
     })
 
@@ -228,7 +232,7 @@ function listRemoteVersions() {
       var version = release.version.replace( /^v/, '' )
       if( version === current.version ) {
         process.stdout.write( `  \u001b[36mo\u001b[0m ${version}\u001b[0m${os.EOL}` )
-      } else if( localVersions.includes( version ) ) {
+      } else if( includes( localVersions, version ) ) {
         process.stdout.write( `    ${version}${os.EOL}` )
       } else {
         process.stdout.write( `    \u001b[2m${version}\u001b[22m${os.EOL}` )
@@ -245,7 +249,7 @@ function getLocalVersions() {
   var dirname = path.join( BASE_VERSIONS_DIR, 'node' )
 
   return fs.readdirSync( dirname )
-    .filter(( version ) => {
+    .filter( function( version ) {
       return /^\d+\.\d+\.\d+$/.test( version )
     })
     .sort( semver.rcompare )
@@ -255,7 +259,7 @@ function getLocalVersions() {
 function listLocalVersions() {
   process.stdout.write( os.EOL )
   var current = getCurrentVersion()
-  getLocalVersions().forEach(( version ) => {
+  getLocalVersions().forEach(function( version ) {
     version === current.version ?
       process.stdout.write( `  \u001b[36mo\u001b[0m ${version}\u001b[0m${os.EOL}` ) :
       process.stdout.write( `    \u001b[2m${version}\u001b[22m${os.EOL}` )
@@ -267,7 +271,7 @@ function getChecksums( version, callback ) {
   var https = require( 'https' )
   var url = checksumUrl( version )
 
-  var req = https.get( url, ( res ) => {
+  var req = https.get( url, function( res ) {
 
     if( res.statusCode !== 200 ) {
       res.destroy()
@@ -285,9 +289,9 @@ function getChecksums( version, callback ) {
       while( chunk = this.read() ) data += chunk
     })
 
-    res.once( 'end', () => {
+    res.once( 'end', function() {
       var checksums = {}
-      data.trim().split( /\r?\n/g ).forEach(( line ) => {
+      data.trim().split( /\r?\n/g ).forEach( function( line ) {
         var parts = line.split( /\s+/ )
         if( parts.length === 2 ) {
           checksums[ parts[1] ] = parts[0]
@@ -322,9 +326,10 @@ function install( version, platform, arch, callback ) {
       next( null, chunk )
     },
     flush( done ) {
-      this.hash.on( 'readable', () => {
-        var hash = this.hash.read()
-        if( hash ) this.emit( 'hash', hash )
+      var self = this
+      this.hash.on( 'readable', function() {
+        var hash = self.hash.read()
+        if( hash ) self.emit( 'hash', hash )
       })
       // this.hash.end()
     }
@@ -332,11 +337,11 @@ function install( version, platform, arch, callback ) {
 
   checksum.hash = crypto.createHash( 'sha256' )
 
-  checksum.on( 'hash', ( hash ) => {
+  checksum.on( 'hash', function( hash ) {
     var checksum = hash.toString( 'hex' )
     var filename = path.basename( archive )
     log( 'fetch', 'SHASUMS256' )
-    getChecksums( version, ( error, checksums ) => {
+    getChecksums( version, function( error, checksums ) {
       if( checksum === checksums[ filename ] ) {
         log( 'checksum', hash.toString( 'hex' ) )
       } else {
@@ -359,7 +364,7 @@ function install( version, platform, arch, callback ) {
 
     log( 'extract', '' )
 
-    extract.on( 'entry', ( stats, stream, next ) => {
+    extract.on( 'entry', function( stats, stream, next ) {
 
       archiveRoot = archiveRoot || stats.name.split( '/' ).shift()
 
@@ -436,7 +441,7 @@ function activate( version, platform, arch ) {
   // process.stdout.write( os.EOL )
   // log( 'unlink', '' )
 
-  currentBins.forEach(( bin ) => {
+  currentBins.forEach( function( bin ) {
     var filename = path.join( N_PREFIX, 'bin', bin )
     // eraseLine()
     // log( 'unlink', filename )
@@ -518,19 +523,19 @@ switch( argv.command ) {
 // version from the remote
 if( !argv.command && argv.version ) {
   var semver = require( 'semver' )
-  getRemoteVersions(( error, data ) => {
+  getRemoteVersions( function( error, data ) {
     if( error ) throw error
-    var versions = data.map(( release ) => release.version )
+    var versions = data.map( function( release ) { return release.version })
     var version = semver.maxSatisfying( versions, argv.version )
     if( version ) {
       version = version.replace( /^v/, '' )
       var localVersions = getLocalVersions()
       if( localVersions.indexOf( version ) !== -1 ) {
-        activate( version, process.platform, argv.arch || process.arch, ( error ) => {
+        activate( version, process.platform, argv.arch || process.arch, function( error ) {
           if( error ) throw error
         })
       } else {
-        install( version, process.platform, argv.arch || process.arch, ( error ) => {
+        install( version, process.platform, argv.arch || process.arch, function( error ) {
           if( error ) throw error
         })
       }
