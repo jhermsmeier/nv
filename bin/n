@@ -24,7 +24,8 @@ function usage() {
     '',
     '  Commands:',
     '',
-    '    $0 <version>               Install node <version>',
+    '    $0 <version>               Activate node <version>',
+    '    $0 i <version>             Install node <version>',
     '    $0 latest                  Install or activate the latest node release',
     '    $0 -a x86 latest           As above but force 32 bit architecture',
     '    $0 stable                  Install or activate the latest stable node release',
@@ -501,8 +502,8 @@ function parseArgv( args ) {
   var argv = { _: [] }
   var value = null
 
-  if( semver.coerce( args[0] ) ) {
-    argv.version = new semver.Range( args.shift() )
+  if( semver.coerce( args[ args.length - 1 ] ) ) {
+    argv.version = new semver.Range( args.pop() )
   } else {
     argv.command = args[0] && args[0][0] !== '-' && args.shift()
   }
@@ -523,24 +524,7 @@ function parseArgv( args ) {
 
 }
 
-argv = parseArgv( argv )
-// console.log( argv )
-
-switch( argv.command ) {
-  case 'ls': return listLocalVersions()
-  case 'rm': return remove()
-  case 'prune': return prune()
-  case 'bin': return bin()
-  case 'versions': return listRemoteVersions()
-  case 'latest': return installLatest()
-  case 'stable': return installStable()
-  case 'lts': return installLTS()
-}
-
-// If no command is given, but a version number is,
-// parse it as a range and select the highest matching
-// version from the remote
-if( !argv.command && argv.version ) {
+function installCommand( argv ) {
   var semver = require( 'semver' )
   getRemoteVersions( function( error, data ) {
     if( error ) {
@@ -567,4 +551,43 @@ if( !argv.command && argv.version ) {
       logError( 'No version for ' + argv.version.range )
     }
   })
+}
+
+function activateCommand( argv ) {
+  var semver = require( 'semver' )
+  var versions = getLocalVersions()
+  var version = semver.maxSatisfying( versions, argv.version )
+  if( version ) {
+    version = version.replace( /^v/, '' )
+    if( versions.indexOf( version ) !== -1 ) {
+      activate( version, process.platform, argv.arch || process.arch )
+    } else {
+      logError( 'No local version for ' + argv.version.range )
+    }
+  } else {
+    logError( 'No local version for ' + argv.version.range )
+  }
+}
+
+argv = parseArgv( argv )
+// console.log( argv )
+
+switch( argv.command ) {
+  case 'i': return installCommand( argv )
+  case 'install': return installCommand( argv )
+  case 'ls': return listLocalVersions()
+  case 'rm': return remove()
+  case 'prune': return prune()
+  case 'bin': return bin()
+  case 'versions': return listRemoteVersions()
+  case 'latest': return installLatest()
+  case 'stable': return installStable()
+  case 'lts': return installLTS()
+}
+
+// If no command is given, but a version number is,
+// parse it as a range and select the highest matching
+// version from the remote
+if( !argv.command && argv.version ) {
+  activateCommand( argv )
 }
