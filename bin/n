@@ -248,20 +248,20 @@ function listRemoteVersions() {
     })
 
     getCurrentVersion( function( error, current ) {
-      var localVersions = getLocalVersions()
-
-      process.stdout.write( os.EOL )
-      applicable.sort( function( a, b ) {
-        return semver.compare( a.version, b.version )
-      }).forEach( function( release ) {
-        var version = release.version.replace( /^v/, '' )
-        if( version === current.version ) {
-          process.stdout.write( '  \u001b[36mo\u001b[0m ' + version + '\u001b[0m' + os.EOL )
-        } else if( includes( localVersions, version ) ) {
-          process.stdout.write( '    ' + version + os.EOL )
-        } else {
-          process.stdout.write( '    \u001b[2m' + version + '\u001b[22m' + os.EOL )
-        }
+      getLocalVersions( function( error, localVersions ) {
+        process.stdout.write( os.EOL )
+        applicable.sort( function( a, b ) {
+          return semver.compare( a.version, b.version )
+        }).forEach( function( release ) {
+          var version = release.version.replace( /^v/, '' )
+          if( version === current.version ) {
+            process.stdout.write( '  \u001b[36mo\u001b[0m ' + version + '\u001b[0m' + os.EOL )
+          } else if( includes( localVersions, version ) ) {
+            process.stdout.write( '    ' + version + os.EOL )
+          } else {
+            process.stdout.write( '    \u001b[2m' + version + '\u001b[22m' + os.EOL )
+          }
+        })
       })
     })
 
@@ -269,27 +269,39 @@ function listRemoteVersions() {
 
 }
 
-function getLocalVersions() {
+function getLocalVersions( callback ) {
 
   var semver = require( 'semver' )
   var dirname = path.join( BASE_VERSIONS_DIR, 'node' )
 
-  return fs.readdirSync( dirname )
-    .filter( function( version ) {
+  return fs.readdir( dirname, function( error, ls ) {
+
+    if( error && error.code === 'ENOENT' ) {
+      return callback( null, [] )
+    } else if( error ) {
+      return callback( error )
+    }
+
+    var versions = ls.filter( function( version ) {
       return /^\d+\.\d+\.\d+$/.test( version )
     })
     .sort( semver.compare )
+
+    callback( null, versions )
+
+  })
 
 }
 
 function listLocalVersions() {
   getCurrentVersion( function( error, current ) {
-    var localVersions = getLocalVersions()
-    process.stdout.write( os.EOL )
-    localVersions.forEach( function( version ) {
-      version === current.version ?
-        process.stdout.write( '  \u001b[36mo\u001b[0m ' + version + '\u001b[0m' + os.EOL ) :
-        process.stdout.write( '    \u001b[2m' + version + '\u001b[22m' + os.EOL )
+    getLocalVersions( function( error, localVersions ) {
+      process.stdout.write( os.EOL )
+      localVersions.forEach( function( version ) {
+        version === current.version ?
+          process.stdout.write( '  \u001b[36mo\u001b[0m ' + version + '\u001b[0m' + os.EOL ) :
+          process.stdout.write( '    \u001b[2m' + version + '\u001b[22m' + os.EOL )
+      })
     })
   })
 }
@@ -560,18 +572,19 @@ function installCommand( argv ) {
     var version = semver.maxSatisfying( versions, argv.version )
     if( version ) {
       version = version.replace( /^v/, '' )
-      var localVersions = getLocalVersions()
-      if( localVersions.indexOf( version ) !== -1 ) {
-        activate( version, process.platform, argv.arch || process.arch )
-      } else {
-        install( version, process.platform, argv.arch || process.arch, function( error ) {
-          if( error ) {
-            process.exitCode = 1
-            return logError( error )
-          }
+      getLocalVersions( function( error, localVersions ) {
+        if( localVersions.indexOf( version ) !== -1 ) {
           activate( version, process.platform, argv.arch || process.arch )
-        })
-      }
+        } else {
+          install( version, process.platform, argv.arch || process.arch, function( error ) {
+            if( error ) {
+              process.exitCode = 1
+              return logError( error )
+            }
+            activate( version, process.platform, argv.arch || process.arch )
+          })
+        }
+      })
     } else {
       logError( 'No version for ' + argv.version.range )
     }
@@ -580,18 +593,19 @@ function installCommand( argv ) {
 
 function activateCommand( argv ) {
   var semver = require( 'semver' )
-  var versions = getLocalVersions()
-  var version = semver.maxSatisfying( versions, argv.version )
-  if( version ) {
-    version = version.replace( /^v/, '' )
-    if( versions.indexOf( version ) !== -1 ) {
-      activate( version, process.platform, argv.arch || process.arch )
+  getLocalVersions( function( error, versions ) {
+    var version = semver.maxSatisfying( versions, argv.version )
+    if( version ) {
+      version = version.replace( /^v/, '' )
+      if( versions.indexOf( version ) !== -1 ) {
+        activate( version, process.platform, argv.arch || process.arch )
+      } else {
+        logError( 'No local version for ' + argv.version.range )
+      }
     } else {
       logError( 'No local version for ' + argv.version.range )
     }
-  } else {
-    logError( 'No local version for ' + argv.version.range )
-  }
+  })
 }
 
 argv = parseArgv( argv )
