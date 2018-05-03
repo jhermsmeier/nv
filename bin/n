@@ -541,7 +541,9 @@ function parseArgv( args ) {
 
   if( semver.coerce( args[ args.length - 1 ] ) ) {
     argv.version = new semver.Range( args.pop() )
-  } else {
+  }
+
+  if( !semver.coerce( args[0] ) ) {
     argv.command = args[0] && args[0][0] !== '-' && args.shift()
   }
 
