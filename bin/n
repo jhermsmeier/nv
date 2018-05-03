@@ -139,19 +139,38 @@ function checksumUrl( version ) {
   return NODE_MIRROR + 'v' + version + '/SHASUMS256.txt'
 }
 
-function getCurrentVersion() {
-  var childProcess = require( 'child_process' )
+function getCurrentVersion( callback ) {
   // When bundled, `pkg` assumes self as "node", so we need an absolute path
   var which = process.platform === 'win32' ? 'where node' : 'which node'
-  var node = childProcess.execSync( which ).toString().trim()
-  var cmd = node + ' -e "console.log(JSON.stringify({ version: process.versions.node, arch: process.arch }))"'
-  var info = null
-  try {
-    info = JSON.parse( childProcess.execSync( cmd ).toString() )
-  } catch( error ) {
-    logError( error )
-  }
-  return info
+  var childProcess = require( 'child_process' )
+
+  var node = childProcess.exec( which, function( error, stdout, stderr ) {
+
+    if( error ) {
+      return callback( error )
+    }
+
+    var node = stdout.toString().trim()
+    var argv = [ '-e', 'console.log(JSON.stringify({ version: process.versions.node, arch: process.arch }))' ]
+
+    childProcess.execFile( node, argv, function( error, stdout, stderr ) {
+
+      var info = null
+
+      if( error ) {
+        return callback( error )
+      }
+
+      try { info = JSON.parse( stdout ) } catch( error ) {
+        return callback( error )
+      }
+
+      callback( null, info )
+
+    })
+
+  })
+
 }
 
 function getRemoteVersions( callback ) {
@@ -228,21 +247,22 @@ function listRemoteVersions() {
       return hasAsset( tuple, release )
     })
 
-    var current = getCurrentVersion()
-    var localVersions = getLocalVersions()
+    getCurrentVersion( function( error, current ) {
+      var localVersions = getLocalVersions()
 
-    process.stdout.write( os.EOL )
-    applicable.sort( function( a, b ) {
-      return semver.compare( a.version, b.version )
-    }).forEach( function( release ) {
-      var version = release.version.replace( /^v/, '' )
-      if( version === current.version ) {
-        process.stdout.write( '  \u001b[36mo\u001b[0m ' + version + '\u001b[0m' + os.EOL )
-      } else if( includes( localVersions, version ) ) {
-        process.stdout.write( '    ' + version + os.EOL )
-      } else {
-        process.stdout.write( '    \u001b[2m' + version + '\u001b[22m' + os.EOL )
-      }
+      process.stdout.write( os.EOL )
+      applicable.sort( function( a, b ) {
+        return semver.compare( a.version, b.version )
+      }).forEach( function( release ) {
+        var version = release.version.replace( /^v/, '' )
+        if( version === current.version ) {
+          process.stdout.write( '  \u001b[36mo\u001b[0m ' + version + '\u001b[0m' + os.EOL )
+        } else if( includes( localVersions, version ) ) {
+          process.stdout.write( '    ' + version + os.EOL )
+        } else {
+          process.stdout.write( '    \u001b[2m' + version + '\u001b[22m' + os.EOL )
+        }
+      })
     })
 
   })
@@ -263,12 +283,14 @@ function getLocalVersions() {
 }
 
 function listLocalVersions() {
-  process.stdout.write( os.EOL )
-  var current = getCurrentVersion()
-  getLocalVersions().forEach( function( version ) {
-    version === current.version ?
-      process.stdout.write( '  \u001b[36mo\u001b[0m ' + version + '\u001b[0m' + os.EOL ) :
-      process.stdout.write( '    \u001b[2m' + version + '\u001b[22m' + os.EOL )
+  getCurrentVersion( function( error, current ) {
+    var localVersions = getLocalVersions()
+    process.stdout.write( os.EOL )
+    localVersions.forEach( function( version ) {
+      version === current.version ?
+        process.stdout.write( '  \u001b[36mo\u001b[0m ' + version + '\u001b[0m' + os.EOL ) :
+        process.stdout.write( '    \u001b[2m' + version + '\u001b[22m' + os.EOL )
+    })
   })
 }
 
@@ -455,41 +477,44 @@ function install( version, platform, arch, callback ) {
 
 function activate( version, platform, arch ) {
 
-  var current = getCurrentVersion()
-  var currentBins = fs.readdirSync( path.join( BASE_VERSIONS_DIR, 'node', current.version, 'bin' ) )
+  getCurrentVersion( function( error, current ) {
 
-  // process.stdout.write( os.EOL )
-  // log( 'unlink', '' )
+    var currentBins = fs.readdirSync( path.join( BASE_VERSIONS_DIR, 'node', current.version, 'bin' ) )
 
-  currentBins.forEach( function( bin ) {
-    var filename = path.join( N_PREFIX, 'bin', bin )
-    // eraseLine()
-    // log( 'unlink', filename )
-    fs.unlinkSync( filename )
-  })
+    // process.stdout.write( os.EOL )
+    // log( 'unlink', '' )
 
-  process.stdout.write( os.EOL )
-  log( 'activate', 'node-v' + version )
-  process.stdout.write( os.EOL )
+    currentBins.forEach( function( bin ) {
+      var filename = path.join( N_PREFIX, 'bin', bin )
+      // eraseLine()
+      // log( 'unlink', filename )
+      fs.unlinkSync( filename )
+    })
 
-  var newBins = fs.readdirSync( path.join( BASE_VERSIONS_DIR, 'node', version, 'bin' ) )
+    process.stdout.write( os.EOL )
+    log( 'activate', 'node-v' + version )
+    process.stdout.write( os.EOL )
 
-  newBins.forEach( function( bin ) {
-    var target = path.join( N_PREFIX, 'bin', bin )
-    var filename = path.join( BASE_VERSIONS_DIR, 'node', version, 'bin', bin )
-    // eraseLine()
-    // NOTE: `node` needs hard linking, as otherwise
-    // npm's global root would point to N_PREFIX.
-    // This also avoids having to allow Node
-    // through the firewall repeatedly.
-    if( bin === 'node' ) {
-      log( 'link', target + ' -> ' + filename )
-      fs.linkSync( filename, target )
-    } else {
-      // NOTE: This probably won't work on Windows (?)
-      log( 'symlink', target + ' -> ' + filename )
-      fs.symlinkSync( filename, target )
-    }
+    var newBins = fs.readdirSync( path.join( BASE_VERSIONS_DIR, 'node', version, 'bin' ) )
+
+    newBins.forEach( function( bin ) {
+      var target = path.join( N_PREFIX, 'bin', bin )
+      var filename = path.join( BASE_VERSIONS_DIR, 'node', version, 'bin', bin )
+      // eraseLine()
+      // NOTE: `node` needs hard linking, as otherwise
+      // npm's global root would point to N_PREFIX.
+      // This also avoids having to allow Node
+      // through the firewall repeatedly.
+      if( bin === 'node' ) {
+        log( 'link', target + ' -> ' + filename )
+        fs.linkSync( filename, target )
+      } else {
+        // NOTE: This probably won't work on Windows (?)
+        log( 'symlink', target + ' -> ' + filename )
+        fs.symlinkSync( filename, target )
+      }
+    })
+
   })
 
 }
