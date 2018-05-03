@@ -610,9 +610,14 @@ switch( argv.command ) {
   case 'lts': return installLTS()
 }
 
-// If no command is given, but a version number is,
-// parse it as a range and select the highest matching
-// version from the remote
+// If no command is given, but a version number is, parse it as a
+// range and select the highest matching version from the remote
 if( !argv.command && argv.version ) {
   activateCommand( argv )
+} else {
+  getCurrentVersion( function( error, current ) {
+    if( error ) return logError( error )
+    process.stdout.write( os.EOL )
+    log( 'active', current.version + ' (' + current.arch + ')' )
+  })
 }
