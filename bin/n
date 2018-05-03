@@ -9,7 +9,7 @@ var NODE_MIRROR = process.env['NODE_MIRROR'] ||
 
 var N_PREFIX = process.env.N_PREFIX || (
   process.platform === 'win32' ?
-    process.env['APPDATA_LOCAL'] :
+    process.env['LOCALAPPDATA'] :
     '/usr/local'
 )
 
