@@ -5,7 +5,7 @@ var zlib = require( 'zlib' )
 var tar = require( 'tar-stream' )
 var package = require( '../package.json' )
 
-var entrypoint = path.join( __dirname, '..', 'bin', 'n' )
+var entrypoint = path.join( __dirname, '..', 'bin', 'nv' )
 var output = path.join( __dirname, '..', 'dist' )
 var bindir = path.join( output, 'bin' )
 

@@ -1,5 +1,5 @@
 {
-  "name": "n",
+  "name": "nv",
   "version": "1.0.0",
   "description": "Node version management",
   "author": "Jonas Hermsmeier <jhermsmeier@gmail.com> (https://jhermsmeier.de)",
@@ -7,7 +7,7 @@
   "license": "MIT",
   "main": "",
   "bin": {
-    "nv": "bin/n"
+    "nv": "bin/nv"
   },
   "scripts": {
     "pkg": "node scripts/pkg.js"
