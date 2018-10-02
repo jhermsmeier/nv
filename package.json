@@ -13,7 +13,7 @@
     "pkg": "node scripts/pkg.js"
   },
   "dependencies": {
-    "readable-stream": "^2.3.6",
+    "readable-stream": "^3.0.4",
     "semver": "^5.5.0",
     "tar-stream": "^1.6.0"
   },
