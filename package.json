@@ -13,11 +13,11 @@
     "pkg": "node scripts/pkg.js"
   },
   "dependencies": {
-    "readable-stream": "^3.0.4",
-    "semver": "^5.5.0",
-    "tar-stream": "^1.6.0"
+    "readable-stream": "^3.4.0",
+    "semver": "^6.3.0",
+    "tar-stream": "^2.1.0"
   },
   "devDependencies": {
-    "pkg": "^4.3.1"
+    "pkg": "^4.4.0"
   }
 }
