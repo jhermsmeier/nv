@@ -127,7 +127,7 @@ process.on( 'exit', onExit )
 
 function getArchitecture() {
   if( process.arch == 'arm' ) {
-    var arch = require( 'child_process' ).execSync( 'uname -m' ).toString()
+    var arch = require( 'child_process' ).execSync( 'uname -m' ).toString().trim()
     getArchitecture = function() { return arch }
     return arch
   }
