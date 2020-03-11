@@ -125,11 +125,19 @@ process.on( 'exit', onExit )
 // fullscreen()
 // hideCursor()
 
+function getArchitecture() {
+  if( process.arch == 'arm' ) {
+    var arch = require( 'child_process' ).execSync( 'uname -m' ).toString()
+    getArchitecture = function() { return arch }
+  }
+  return process.arch
+}
+
 function archiveUrl( version, platform, arch, format ) {
 
   platform = platform || ( platform === 'win32' ? 'win' : platform )
   format = format || ( platform === 'win' ? '.zip' : '.tar.gz' )
-  arch = arch || process.arch
+  arch = arch || getArchitecture()
 
   return NODE_MIRROR + 'v' + version + '/node-v' + version + '-' + platform + '-' + arch + format
 
@@ -219,9 +227,9 @@ function getPlatform() {
 function getReleaseAssetTuple( platform ) {
   platform = platform || process.platform
   switch( platform ) {
-    case 'darwin': return getPlatform() + '-' + process.arch + '-tar'
-    case 'win32': return getPlatform() + '-' + process.arch + '-zip'
-    default: return getPlatform() + '-' + process.arch
+    case 'darwin': return getPlatform() + '-' + getArchitecture() + '-tar'
+    case 'win32': return getPlatform() + '-' + getArchitecture() + '-zip'
+    default: return getPlatform() + '-' + getArchitecture()
   }
 }
 
@@ -576,14 +584,14 @@ function installCommand( argv ) {
       version = version.replace( /^v/, '' )
       getLocalVersions( function( error, localVersions ) {
         if( localVersions.indexOf( version ) !== -1 ) {
-          activate( version, process.platform, argv.arch || process.arch )
+          activate( version, process.platform, argv.arch || getArchitecture() )
         } else {
-          install( version, process.platform, argv.arch || process.arch, function( error ) {
+          install( version, process.platform, argv.arch || getArchitecture(), function( error ) {
             if( error ) {
               process.exitCode = 1
               return logError( error )
             }
-            activate( version, process.platform, argv.arch || process.arch )
+            activate( version, process.platform, argv.arch || getArchitecture() )
           })
         }
       })
@@ -600,7 +608,7 @@ function activateCommand( argv ) {
     if( version ) {
       version = version.replace( /^v/, '' )
       if( versions.indexOf( version ) !== -1 ) {
-        activate( version, process.platform, argv.arch || process.arch )
+        activate( version, process.platform, argv.arch || getArchitecture() )
       } else {
         logError( 'No local version for ' + argv.version.range )
       }
