@@ -43,7 +43,7 @@ function usage() {
     '    -a, --arch        Override system architecture',
     '',
   ]
-  return USAGE.join( os.EOL ).replace( /\$0/g, bin )
+  return USAGE.join( os.EOL ).replace( /\$0/g, bin ) + os.EOL
 }
 
 function includes( array, value ) {
@@ -105,7 +105,7 @@ function logError( error ) {
   process.stdout.write(
     os.EOL + '  \u001b[31m' + pad( 'error', 10 ) +
     '\u001b[0m : \u001b[2m' + ( process.env['DEBUG'] ? error.stack : error ) +
-    '\u001b[22m\u001b[0m' + os.EOL
+    '\u001b[22m\u001b[0m' + os.EOL + os.EOL
   )
 }
 
@@ -271,6 +271,7 @@ function listRemoteVersions() {
             process.stdout.write( '    \u001b[2m' + version + '\u001b[22m' + os.EOL )
           }
         })
+        process.stdout.write( os.EOL )
       })
     })
 
@@ -311,6 +312,7 @@ function listLocalVersions() {
           process.stdout.write( '  \u001b[36mo\u001b[0m ' + version + '\u001b[0m' + os.EOL ) :
           process.stdout.write( '    \u001b[2m' + version + '\u001b[22m' + os.EOL )
       })
+      process.stdout.write( os.EOL )
     })
   })
 }
@@ -536,6 +538,8 @@ function activate( version, platform, arch ) {
       }
     })
 
+    process.stdout.write( os.EOL )
+
   })
 
 }
@@ -644,5 +648,6 @@ if( !argv.command && argv.version ) {
     if( error ) return logError( error )
     process.stdout.write( os.EOL )
     log( 'active', current.version + ' (' + current.arch + ')' )
+    process.stdout.write( os.EOL )
   })
 }
